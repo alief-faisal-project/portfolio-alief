@@ -68,7 +68,7 @@ const Index = () => {
       <footer className="py-8 border-t border-border">
         <div className="container mx-auto px-4 text-center">
           <p className="text-muted-foreground text-sm">
-            © 2025 Faisal. Dilindungi Hak Cipta.
+            © {new Date().getFullYear()} Faisal. Dilindungi Hak Cipta.
           </p>
         </div>
       </footer>
