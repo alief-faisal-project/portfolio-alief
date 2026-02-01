@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 
 interface TextPressureProps {
   text?: string;
@@ -24,7 +24,12 @@ const dist = (a: { x: number; y: number }, b: { x: number; y: number }) => {
   return Math.sqrt(dx * dx + dy * dy);
 };
 
-const getAttr = (distance: number, maxDist: number, minVal: number, maxVal: number) => {
+const getAttr = (
+  distance: number,
+  maxDist: number,
+  minVal: number,
+  maxVal: number,
+) => {
   const val = maxVal - Math.abs((maxVal * distance) / maxDist);
   return Math.max(minVal, val + minVal);
 };
@@ -33,16 +38,14 @@ const debounce = (func: (...args: unknown[]) => void, delay: number) => {
   let timeoutId: ReturnType<typeof setTimeout>;
   return (...args: unknown[]) => {
     clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => {
-      func(...args);
-    }, delay);
+    timeoutId = setTimeout(() => func(...args), delay);
   };
 };
 
 const TextPressure: React.FC<TextPressureProps> = ({
-  text = 'FAISAL',
-  fontFamily = 'Compressa VF',
-  fontUrl = 'https://res.cloudinary.com/dr6lvwubh/raw/upload/v1529908256/CompressaPRO-GX.woff2',
+  text = "FAISAL",
+  fontFamily = "Compressa VF",
+  fontUrl = "https://res.cloudinary.com/dr6lvwubh/raw/upload/v1529908256/CompressaPRO-GX.woff2",
   width = true,
   weight = true,
   italic = true,
@@ -50,11 +53,11 @@ const TextPressure: React.FC<TextPressureProps> = ({
   flex = true,
   stroke = false,
   scale = false,
-  textColor = '#141414',
-  strokeColor = '#FF0000',
+  textColor = "#141414",
+  strokeColor = "#FF0000",
   strokeWidth = 2,
-  className = '',
-  minFontSize = 24
+  className = "",
+  minFontSize = 24,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const titleRef = useRef<HTMLHeadingElement | null>(null);
@@ -67,40 +70,76 @@ const TextPressure: React.FC<TextPressureProps> = ({
   const [scaleY, setScaleY] = useState(1);
   const [lineHeight, setLineHeight] = useState(1);
 
-  const chars = text.split('');
+  const chars = text.split("");
 
+  /* ===============================
+     GYROSCOPE + FALLBACK MOUSE
+  =============================== */
   useEffect(() => {
+    const initCenter = () => {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      mouseRef.current = {
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+      };
+      cursorRef.current = { ...mouseRef.current };
+    };
+
+    initCenter();
+
+    // ===== iOS permission =====
+    const requestIOSPermission = async () => {
+      // @ts-ignore
+      if (typeof DeviceOrientationEvent?.requestPermission === "function") {
+        try {
+          // @ts-ignore
+          const res = await DeviceOrientationEvent.requestPermission();
+          if (res !== "granted") return;
+        } catch {
+          return;
+        }
+      }
+    };
+
+    requestIOSPermission();
+
+    const handleOrientation = (e: DeviceOrientationEvent) => {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+
+      const gamma = e.gamma ?? 0; // kiri kanan
+      const beta = e.beta ?? 0; // depan belakang
+
+      const x = rect.left + rect.width / 2 + (gamma / 45) * rect.width * 0.5;
+      const y = rect.top + rect.height / 2 + (beta / 45) * rect.height * 0.5;
+
+      cursorRef.current.x = x;
+      cursorRef.current.y = y;
+    };
+
     const handleMouseMove = (e: MouseEvent) => {
       cursorRef.current.x = e.clientX;
       cursorRef.current.y = e.clientY;
     };
-    const handleTouchMove = (e: TouchEvent) => {
-      const t = e.touches[0];
-      cursorRef.current.x = t.clientX;
-      cursorRef.current.y = t.clientY;
-    };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('touchmove', handleTouchMove, { passive: true });
-
-    if (containerRef.current) {
-      const { left, top, width, height } = containerRef.current.getBoundingClientRect();
-      mouseRef.current.x = left + width / 2;
-      mouseRef.current.y = top + height / 2;
-      cursorRef.current.x = mouseRef.current.x;
-      cursorRef.current.y = mouseRef.current.y;
-    }
+    window.addEventListener("deviceorientation", handleOrientation);
+    window.addEventListener("mousemove", handleMouseMove);
 
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener("deviceorientation", handleOrientation);
+      window.removeEventListener("mousemove", handleMouseMove);
     };
   }, []);
 
+  /* ===============================
+        SIZE CALCULATION
+  =============================== */
   const setSize = useCallback(() => {
     if (!containerRef.current || !titleRef.current) return;
 
-    const { width: containerW, height: containerH } = containerRef.current.getBoundingClientRect();
+    const { width: containerW, height: containerH } =
+      containerRef.current.getBoundingClientRect();
 
     let newFontSize = containerW / (chars.length / 2);
     newFontSize = Math.max(newFontSize, minFontSize);
@@ -122,46 +161,44 @@ const TextPressure: React.FC<TextPressureProps> = ({
   }, [chars.length, minFontSize, scale]);
 
   useEffect(() => {
-    const debouncedSetSize = debounce(setSize, 100);
-    debouncedSetSize();
-    window.addEventListener('resize', debouncedSetSize);
-    return () => window.removeEventListener('resize', debouncedSetSize);
+    const debounced = debounce(setSize, 100);
+    debounced();
+    window.addEventListener("resize", debounced);
+    return () => window.removeEventListener("resize", debounced);
   }, [setSize]);
 
+  /* ===============================
+          ANIMATION LOOP
+  =============================== */
   useEffect(() => {
     let rafId: number;
+
     const animate = () => {
-      mouseRef.current.x += (cursorRef.current.x - mouseRef.current.x) / 15;
-      mouseRef.current.y += (cursorRef.current.y - mouseRef.current.y) / 15;
+      mouseRef.current.x += (cursorRef.current.x - mouseRef.current.x) / 12;
+      mouseRef.current.y += (cursorRef.current.y - mouseRef.current.y) / 12;
 
       if (titleRef.current) {
         const titleRect = titleRef.current.getBoundingClientRect();
         const maxDist = titleRect.width / 2;
 
-        spansRef.current.forEach(span => {
+        spansRef.current.forEach((span) => {
           if (!span) return;
 
           const rect = span.getBoundingClientRect();
           const charCenter = {
             x: rect.x + rect.width / 2,
-            y: rect.y + rect.height / 2
+            y: rect.y + rect.height / 2,
           };
 
           const d = dist(mouseRef.current, charCenter);
 
           const wdth = width ? Math.floor(getAttr(d, maxDist, 5, 200)) : 100;
           const wght = weight ? Math.floor(getAttr(d, maxDist, 100, 900)) : 400;
-          const italVal = italic ? getAttr(d, maxDist, 0, 1).toFixed(2) : '0';
-          const alphaVal = alpha ? getAttr(d, maxDist, 0, 1).toFixed(2) : '1';
+          const italVal = italic ? getAttr(d, maxDist, 0, 1).toFixed(2) : "0";
+          const alphaVal = alpha ? getAttr(d, maxDist, 0, 1).toFixed(2) : "1";
 
-          const newFontVariationSettings = `'wght' ${wght}, 'wdth' ${wdth}, 'ital' ${italVal}`;
-
-          if (span.style.fontVariationSettings !== newFontVariationSettings) {
-            span.style.fontVariationSettings = newFontVariationSettings;
-          }
-          if (alpha && span.style.opacity !== alphaVal) {
-            span.style.opacity = alphaVal;
-          }
+          span.style.fontVariationSettings = `'wght' ${wght}, 'wdth' ${wdth}, 'ital' ${italVal}`;
+          if (alpha) span.style.opacity = alphaVal;
         });
       }
 
@@ -172,13 +209,15 @@ const TextPressure: React.FC<TextPressureProps> = ({
     return () => cancelAnimationFrame(rafId);
   }, [width, weight, italic, alpha]);
 
-  const styleElement = useMemo(() => {
-    return (
+  /* ===============================
+              STYLE
+  =============================== */
+  const styleElement = useMemo(
+    () => (
       <style>{`
         @font-face {
           font-family: '${fontFamily}';
           src: url('${fontUrl}');
-          font-style: normal;
         }
         .stroke span {
           position: relative;
@@ -187,42 +226,37 @@ const TextPressure: React.FC<TextPressureProps> = ({
         .stroke span::after {
           content: attr(data-char);
           position: absolute;
-          left: 0;
-          top: 0;
+          inset: 0;
           color: transparent;
           z-index: -1;
-          -webkit-text-stroke-width: ${strokeWidth}px;
-          -webkit-text-stroke-color: ${strokeColor};
+          -webkit-text-stroke: ${strokeWidth}px ${strokeColor};
         }
       `}</style>
-    );
-  }, [fontFamily, fontUrl, textColor, strokeColor, strokeWidth]);
+    ),
+    [fontFamily, fontUrl, textColor, strokeColor, strokeWidth],
+  );
 
   return (
-    <div ref={containerRef} className="relative w-full h-full overflow-hidden bg-transparent">
+    <div ref={containerRef} className="relative w-full h-full overflow-hidden">
       {styleElement}
       <h1
         ref={titleRef}
-        className={`text-pressure-title ${className} ${
-          flex ? 'flex justify-between' : ''
-        } ${stroke ? 'stroke' : ''} uppercase text-center`}
+        className={`${className} ${flex ? "flex justify-between" : ""} ${stroke ? "stroke" : ""} uppercase`}
         style={{
           fontFamily,
-          fontSize: fontSize,
+          fontSize,
           lineHeight,
           transform: `scale(1, ${scaleY})`,
-          transformOrigin: 'center top',
+          transformOrigin: "center top",
           margin: 0,
           fontWeight: 100,
-          color: stroke ? undefined : textColor
+          color: stroke ? undefined : textColor,
         }}
       >
         {chars.map((char, i) => (
           <span
             key={i}
-            ref={el => {
-              spansRef.current[i] = el;
-            }}
+            ref={(el) => (spansRef.current[i] = el)}
             data-char={char}
             className="inline-block"
           >
