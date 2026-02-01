@@ -69,13 +69,16 @@ const TextPressure: React.FC<TextPressureProps> = ({
   const [fontSize, setFontSize] = useState(minFontSize);
   const [scaleY, setScaleY] = useState(1);
   const [lineHeight, setLineHeight] = useState(1);
-
   const [gyroEnabled, setGyroEnabled] = useState(false);
 
   const chars = text.split("");
 
+  const isIOS =
+    typeof window !== "undefined" &&
+    /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
   /* ===============================
-     INIT + MOUSE FALLBACK
+     INIT CENTER + MOUSE FALLBACK
   =============================== */
   useEffect(() => {
     const initCenter = () => {
@@ -106,10 +109,18 @@ const TextPressure: React.FC<TextPressureProps> = ({
   }, [gyroEnabled]);
 
   /* ===============================
-     ENABLE GYRO (IOS SAFE)
+     AUTO ENABLE ANDROID
+  =============================== */
+  useEffect(() => {
+    if (!isIOS) {
+      setGyroEnabled(true);
+    }
+  }, [isIOS]);
+
+  /* ===============================
+     ENABLE GYRO (IOS ONLY)
   =============================== */
   const enableGyro = async () => {
-    // iOS
     // @ts-ignore
     if (typeof DeviceOrientationEvent?.requestPermission === "function") {
       try {
@@ -118,12 +129,7 @@ const TextPressure: React.FC<TextPressureProps> = ({
         if (res === "granted") {
           setGyroEnabled(true);
         }
-      } catch {
-        return;
-      }
-    } else {
-      // Android
-      setGyroEnabled(true);
+      } catch {}
     }
   };
 
@@ -137,21 +143,18 @@ const TextPressure: React.FC<TextPressureProps> = ({
       if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
 
-      const gamma = e.gamma ?? 0; // kiri kanan
-      const beta = e.beta ?? 0; // depan belakang
+      const gamma = e.gamma ?? 0;
+      const beta = e.beta ?? 0;
 
       cursorRef.current.x =
         rect.left + rect.width / 2 + (gamma / 45) * rect.width * 0.5;
-
       cursorRef.current.y =
         rect.top + rect.height / 2 + (beta / 45) * rect.height * 0.5;
     };
 
     window.addEventListener("deviceorientation", handleOrientation);
-
-    return () => {
+    return () =>
       window.removeEventListener("deviceorientation", handleOrientation);
-    };
   }, [gyroEnabled]);
 
   /* ===============================
@@ -262,21 +265,31 @@ const TextPressure: React.FC<TextPressureProps> = ({
     <div ref={containerRef} className="relative w-full h-full overflow-hidden">
       {styleElement}
 
-      {!gyroEnabled && (
-        <button
-          onClick={enableGyro}
+      {isIOS && !gyroEnabled && (
+        <div
           style={{
             position: "fixed",
-            bottom: 16,
-            right: 16,
+            inset: 0,
+            background: "rgba(0,0,0,0.6)",
             zIndex: 999,
-            padding: "8px 12px",
-            fontSize: 12,
-            opacity: 0.8,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
-          Aktifkan Motion
-        </button>
+          <button
+            onClick={enableGyro}
+            style={{
+              padding: "20px 28px",
+              fontSize: 18,
+              fontWeight: 600,
+              borderRadius: 12,
+              background: "#fff",
+            }}
+          >
+            Aktifkan Motion
+          </button>
+        </div>
       )}
 
       <h1
