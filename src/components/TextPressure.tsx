@@ -34,11 +34,11 @@ const getAttr = (
   return Math.max(minVal, val + minVal);
 };
 
-const debounce = (func: (...args: unknown[]) => void, delay: number) => {
-  let timeoutId: ReturnType<typeof setTimeout>;
-  return (...args: unknown[]) => {
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => func(...args), delay);
+const debounce = (func: () => void, delay: number) => {
+  let t: ReturnType<typeof setTimeout>;
+  return () => {
+    clearTimeout(t);
+    t = setTimeout(func, delay);
   };
 };
 
@@ -59,8 +59,8 @@ const TextPressure: React.FC<TextPressureProps> = ({
   className = "",
   minFontSize = 24,
 }) => {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const titleRef = useRef<HTMLHeadingElement | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const spansRef = useRef<(HTMLSpanElement | null)[]>([]);
 
   const mouseRef = useRef({ x: 0, y: 0 });
@@ -73,170 +73,149 @@ const TextPressure: React.FC<TextPressureProps> = ({
 
   const chars = text.split("");
 
+  const isMobile =
+    typeof window !== "undefined" &&
+    /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const isIOS =
     typeof window !== "undefined" &&
     /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const isDesktop = !isMobile;
 
   /* ===============================
-     INIT CENTER + MOUSE FALLBACK
+        INIT CENTER
   =============================== */
   useEffect(() => {
-    const initCenter = () => {
+    const init = () => {
       if (!containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
+      const r = containerRef.current.getBoundingClientRect();
       mouseRef.current = {
-        x: rect.left + rect.width / 2,
-        y: rect.top + rect.height / 2,
+        x: r.left + r.width / 2,
+        y: r.top + r.height / 2,
       };
       cursorRef.current = { ...mouseRef.current };
     };
+    init();
+    window.addEventListener("resize", init);
+    return () => window.removeEventListener("resize", init);
+  }, []);
 
-    initCenter();
+  /* ===============================
+        DESKTOP MOUSE ONLY
+  =============================== */
+  useEffect(() => {
+    if (!isDesktop) return;
 
-    const handleMouseMove = (e: MouseEvent) => {
-      if (gyroEnabled) return;
+    const handleMouse = (e: MouseEvent) => {
       cursorRef.current.x = e.clientX;
       cursorRef.current.y = e.clientY;
     };
 
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("resize", initCenter);
-
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("resize", initCenter);
-    };
-  }, [gyroEnabled]);
+    window.addEventListener("mousemove", handleMouse);
+    return () => window.removeEventListener("mousemove", handleMouse);
+  }, [isDesktop]);
 
   /* ===============================
-     AUTO ENABLE ANDROID
+        AUTO ANDROID GYRO
   =============================== */
   useEffect(() => {
-    if (!isIOS) {
+    if (isMobile && !isIOS) {
       setGyroEnabled(true);
     }
-  }, [isIOS]);
+  }, [isMobile, isIOS]);
 
   /* ===============================
-     ENABLE GYRO (IOS ONLY)
+        IOS PERMISSION
   =============================== */
   const enableGyro = async () => {
     // @ts-ignore
     if (typeof DeviceOrientationEvent?.requestPermission === "function") {
-      try {
-        // @ts-ignore
-        const res = await DeviceOrientationEvent.requestPermission();
-        if (res === "granted") {
-          setGyroEnabled(true);
-        }
-      } catch {}
+      const res = await DeviceOrientationEvent.requestPermission();
+      if (res === "granted") setGyroEnabled(true);
     }
   };
 
   /* ===============================
-     GYRO LISTENER
+        GYRO LISTENER (MOBILE ONLY)
   =============================== */
   useEffect(() => {
-    if (!gyroEnabled) return;
+    if (!gyroEnabled || isDesktop) return;
 
-    const handleOrientation = (e: DeviceOrientationEvent) => {
+    const handle = (e: DeviceOrientationEvent) => {
       if (!containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-
-      const gamma = e.gamma ?? 0;
-      const beta = e.beta ?? 0;
-
+      const r = containerRef.current.getBoundingClientRect();
       cursorRef.current.x =
-        rect.left + rect.width / 2 + (gamma / 45) * rect.width * 0.5;
+        r.left + r.width / 2 + ((e.gamma ?? 0) / 45) * r.width * 0.5;
       cursorRef.current.y =
-        rect.top + rect.height / 2 + (beta / 45) * rect.height * 0.5;
+        r.top + r.height / 2 + ((e.beta ?? 0) / 45) * r.height * 0.5;
     };
 
-    window.addEventListener("deviceorientation", handleOrientation);
-    return () =>
-      window.removeEventListener("deviceorientation", handleOrientation);
-  }, [gyroEnabled]);
+    window.addEventListener("deviceorientation", handle);
+    return () => window.removeEventListener("deviceorientation", handle);
+  }, [gyroEnabled, isDesktop]);
 
   /* ===============================
-        SIZE CALCULATION
+        SIZE
   =============================== */
   const setSize = useCallback(() => {
     if (!containerRef.current || !titleRef.current) return;
-
-    const { width: containerW, height: containerH } =
-      containerRef.current.getBoundingClientRect();
-
-    let newFontSize = containerW / (chars.length / 2);
-    newFontSize = Math.max(newFontSize, minFontSize);
-
-    setFontSize(newFontSize);
+    const { width, height } = containerRef.current.getBoundingClientRect();
+    let fs = width / (chars.length / 2);
+    fs = Math.max(fs, minFontSize);
+    setFontSize(fs);
     setScaleY(1);
     setLineHeight(1);
 
     requestAnimationFrame(() => {
-      if (!titleRef.current) return;
-      const textRect = titleRef.current.getBoundingClientRect();
-
-      if (scale && textRect.height > 0) {
-        const yRatio = containerH / textRect.height;
-        setScaleY(yRatio);
-        setLineHeight(yRatio);
-      }
+      if (!titleRef.current || !scale) return;
+      const tr = titleRef.current.getBoundingClientRect();
+      const y = height / tr.height;
+      setScaleY(y);
+      setLineHeight(y);
     });
   }, [chars.length, minFontSize, scale]);
 
   useEffect(() => {
-    const debounced = debounce(setSize, 100);
-    debounced();
-    window.addEventListener("resize", debounced);
-    return () => window.removeEventListener("resize", debounced);
+    const d = debounce(setSize, 100);
+    d();
+    window.addEventListener("resize", d);
+    return () => window.removeEventListener("resize", d);
   }, [setSize]);
 
   /* ===============================
-          ANIMATION LOOP
+        ANIMATION
   =============================== */
   useEffect(() => {
-    let rafId: number;
+    let raf: number;
 
-    const animate = () => {
-      mouseRef.current.x += (cursorRef.current.x - mouseRef.current.x) / 12;
-      mouseRef.current.y += (cursorRef.current.y - mouseRef.current.y) / 12;
+    const loop = () => {
+      mouseRef.current.x += (cursorRef.current.x - mouseRef.current.x) / 10;
+      mouseRef.current.y += (cursorRef.current.y - mouseRef.current.y) / 10;
 
       if (titleRef.current) {
-        const titleRect = titleRef.current.getBoundingClientRect();
-        const maxDist = titleRect.width / 2;
+        const tr = titleRef.current.getBoundingClientRect();
+        const max = tr.width / 2;
 
-        spansRef.current.forEach((span) => {
-          if (!span) return;
+        spansRef.current.forEach((s) => {
+          if (!s) return;
+          const r = s.getBoundingClientRect();
+          const c = { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+          const d = dist(mouseRef.current, c);
 
-          const rect = span.getBoundingClientRect();
-          const charCenter = {
-            x: rect.x + rect.width / 2,
-            y: rect.y + rect.height / 2,
-          };
-
-          const d = dist(mouseRef.current, charCenter);
-
-          const wdth = width ? Math.floor(getAttr(d, maxDist, 5, 200)) : 100;
-          const wght = weight ? Math.floor(getAttr(d, maxDist, 100, 900)) : 400;
-          const italVal = italic ? getAttr(d, maxDist, 0, 1).toFixed(2) : "0";
-          const alphaVal = alpha ? getAttr(d, maxDist, 0, 1).toFixed(2) : "1";
-
-          span.style.fontVariationSettings = `'wght' ${wght}, 'wdth' ${wdth}, 'ital' ${italVal}`;
-          if (alpha) span.style.opacity = alphaVal;
+          s.style.fontVariationSettings = `
+            'wght' ${weight ? getAttr(d, max, 100, 900) : 400},
+            'wdth' ${width ? getAttr(d, max, 5, 200) : 100},
+            'ital' ${italic ? getAttr(d, max, 0, 1) : 0}
+          `;
         });
       }
 
-      rafId = requestAnimationFrame(animate);
+      raf = requestAnimationFrame(loop);
     };
 
-    animate();
-    return () => cancelAnimationFrame(rafId);
-  }, [width, weight, italic, alpha]);
+    loop();
+    return () => cancelAnimationFrame(raf);
+  }, [width, weight, italic]);
 
-  /* ===============================
-              STYLE
-  =============================== */
   const styleElement = useMemo(
     () => (
       <style>{`
@@ -244,21 +223,9 @@ const TextPressure: React.FC<TextPressureProps> = ({
           font-family: '${fontFamily}';
           src: url('${fontUrl}');
         }
-        .stroke span {
-          position: relative;
-          color: ${textColor};
-        }
-        .stroke span::after {
-          content: attr(data-char);
-          position: absolute;
-          inset: 0;
-          color: transparent;
-          z-index: -1;
-          -webkit-text-stroke: ${strokeWidth}px ${strokeColor};
-        }
       `}</style>
     ),
-    [fontFamily, fontUrl, textColor, strokeColor, strokeWidth],
+    [fontFamily, fontUrl],
   );
 
   return (
@@ -266,26 +233,10 @@ const TextPressure: React.FC<TextPressureProps> = ({
       {styleElement}
 
       {isIOS && !gyroEnabled && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.6)",
-            zIndex: 999,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <button
             onClick={enableGyro}
-            style={{
-              padding: "20px 28px",
-              fontSize: 18,
-              fontWeight: 600,
-              borderRadius: 12,
-              background: "#fff",
-            }}
+            className="px-8 py-4 text-lg font-semibold bg-white rounded-xl"
           >
             Aktifkan Motion
           </button>
@@ -294,28 +245,20 @@ const TextPressure: React.FC<TextPressureProps> = ({
 
       <h1
         ref={titleRef}
-        className={`${className} ${flex ? "flex justify-between" : ""} ${
-          stroke ? "stroke" : ""
-        } uppercase`}
+        className={`${className} ${flex ? "flex justify-between" : ""} uppercase`}
         style={{
           fontFamily,
           fontSize,
           lineHeight,
           transform: `scale(1, ${scaleY})`,
-          transformOrigin: "center top",
           margin: 0,
           fontWeight: 100,
-          color: stroke ? undefined : textColor,
+          color: textColor,
         }}
       >
-        {chars.map((char, i) => (
-          <span
-            key={i}
-            ref={(el) => (spansRef.current[i] = el)}
-            data-char={char}
-            className="inline-block"
-          >
-            {char}
+        {chars.map((c, i) => (
+          <span key={i} ref={(el) => (spansRef.current[i] = el)}>
+            {c}
           </span>
         ))}
       </h1>
