@@ -70,10 +70,12 @@ const TextPressure: React.FC<TextPressureProps> = ({
   const [scaleY, setScaleY] = useState(1);
   const [lineHeight, setLineHeight] = useState(1);
 
+  const [gyroEnabled, setGyroEnabled] = useState(false);
+
   const chars = text.split("");
 
   /* ===============================
-     GYROSCOPE + FALLBACK MOUSE
+     INIT + MOUSE FALLBACK
   =============================== */
   useEffect(() => {
     const initCenter = () => {
@@ -88,21 +90,48 @@ const TextPressure: React.FC<TextPressureProps> = ({
 
     initCenter();
 
-    // ===== iOS permission =====
-    const requestIOSPermission = async () => {
-      // @ts-ignore
-      if (typeof DeviceOrientationEvent?.requestPermission === "function") {
-        try {
-          // @ts-ignore
-          const res = await DeviceOrientationEvent.requestPermission();
-          if (res !== "granted") return;
-        } catch {
-          return;
-        }
-      }
+    const handleMouseMove = (e: MouseEvent) => {
+      if (gyroEnabled) return;
+      cursorRef.current.x = e.clientX;
+      cursorRef.current.y = e.clientY;
     };
 
-    requestIOSPermission();
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("resize", initCenter);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("resize", initCenter);
+    };
+  }, [gyroEnabled]);
+
+  /* ===============================
+     ENABLE GYRO (IOS SAFE)
+  =============================== */
+  const enableGyro = async () => {
+    // iOS
+    // @ts-ignore
+    if (typeof DeviceOrientationEvent?.requestPermission === "function") {
+      try {
+        // @ts-ignore
+        const res = await DeviceOrientationEvent.requestPermission();
+        if (res === "granted") {
+          setGyroEnabled(true);
+        }
+      } catch {
+        return;
+      }
+    } else {
+      // Android
+      setGyroEnabled(true);
+    }
+  };
+
+  /* ===============================
+     GYRO LISTENER
+  =============================== */
+  useEffect(() => {
+    if (!gyroEnabled) return;
 
     const handleOrientation = (e: DeviceOrientationEvent) => {
       if (!containerRef.current) return;
@@ -111,26 +140,19 @@ const TextPressure: React.FC<TextPressureProps> = ({
       const gamma = e.gamma ?? 0; // kiri kanan
       const beta = e.beta ?? 0; // depan belakang
 
-      const x = rect.left + rect.width / 2 + (gamma / 45) * rect.width * 0.5;
-      const y = rect.top + rect.height / 2 + (beta / 45) * rect.height * 0.5;
+      cursorRef.current.x =
+        rect.left + rect.width / 2 + (gamma / 45) * rect.width * 0.5;
 
-      cursorRef.current.x = x;
-      cursorRef.current.y = y;
-    };
-
-    const handleMouseMove = (e: MouseEvent) => {
-      cursorRef.current.x = e.clientX;
-      cursorRef.current.y = e.clientY;
+      cursorRef.current.y =
+        rect.top + rect.height / 2 + (beta / 45) * rect.height * 0.5;
     };
 
     window.addEventListener("deviceorientation", handleOrientation);
-    window.addEventListener("mousemove", handleMouseMove);
 
     return () => {
       window.removeEventListener("deviceorientation", handleOrientation);
-      window.removeEventListener("mousemove", handleMouseMove);
     };
-  }, []);
+  }, [gyroEnabled]);
 
   /* ===============================
         SIZE CALCULATION
@@ -239,9 +261,29 @@ const TextPressure: React.FC<TextPressureProps> = ({
   return (
     <div ref={containerRef} className="relative w-full h-full overflow-hidden">
       {styleElement}
+
+      {!gyroEnabled && (
+        <button
+          onClick={enableGyro}
+          style={{
+            position: "fixed",
+            bottom: 16,
+            right: 16,
+            zIndex: 999,
+            padding: "8px 12px",
+            fontSize: 12,
+            opacity: 0.8,
+          }}
+        >
+          Aktifkan Motion
+        </button>
+      )}
+
       <h1
         ref={titleRef}
-        className={`${className} ${flex ? "flex justify-between" : ""} ${stroke ? "stroke" : ""} uppercase`}
+        className={`${className} ${flex ? "flex justify-between" : ""} ${
+          stroke ? "stroke" : ""
+        } uppercase`}
         style={{
           fontFamily,
           fontSize,
