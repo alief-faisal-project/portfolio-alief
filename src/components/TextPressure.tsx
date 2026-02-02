@@ -238,7 +238,7 @@ const TextPressure: React.FC<TextPressureProps> = ({
             onClick={enableGyro}
             className="px-8 py-4 text-lg font-semibold bg-white rounded-xl"
           >
-            Aktifkan Motion
+            Aktifkan Motion & Goyangkan
           </button>
         </div>
       )}

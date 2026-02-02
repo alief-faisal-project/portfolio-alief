@@ -42,16 +42,17 @@ const projects: Project[] = [
   },
   {
     id: 4,
-    title: "Next Porject",
-    description: "Coming Soon...",
-    imageUrl: "https://i.ibb.co.com/CswkjD7h/loading.jpg",
+    title: "Website showroom mobil yang dilengkapi dengan admin panel",
+    description: "sedang dikembangkan...",
+    imageUrl: "https://i.ibb.co.com/qLQCQLpt/car.jpg",
     projectUrl: "#",
   },
   {
     id: 5,
-    title: "Next Porject",
-    description: "Coming Soon...",
-    imageUrl: "https://i.ibb.co.com/CswkjD7h/loading.jpg",
+    title:
+      "Platform pencarian rumah sakit terdekat dengan detail informasi lengkap",
+    description: "sedang dikembangkan...",
+    imageUrl: "https://i.ibb.co.com/HD4nmzvF/hospital.jpg",
     projectUrl: "#",
   },
 ];
