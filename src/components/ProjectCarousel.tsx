@@ -107,7 +107,7 @@ const ProjectCarousel = () => {
     <section className="py-12 md:py-20">
       <div className="container mx-auto px-4">
         <h2 className="font-display text-2xl md:text-3xl font-bold text-center mb-8 md:mb-12">
-          My Work
+          My Works
         </h2>
         
         <div className="relative">
